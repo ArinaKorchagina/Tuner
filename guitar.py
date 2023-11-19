@@ -3,20 +3,21 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QButtonGroup
 import pyaudio
 import wave
-from playsound import playsound
+import scipy.io.wavfile
+import matplotlib.pyplot as plt
+import numpy as np
 from threading import Timer
 
 
-class Project(QMainWindow):
+class Guitar(QMainWindow):
     def __init__(self):
         super().__init__()
-        uic.loadUi('Project.ui', self)
+        uic.loadUi('guitar.ui', self)
 
-        # Подключаем кнопку звук
-        self.Sound.clicked.connect(self.sound_bt)
-        # Подключаем кнопку запись
+        # Подключаем кнопки
         self.Recording.clicked.connect(self.record_bt)
-        # Подключаем кнопки выбора струны
+        self.Graf.clicked.connect(self.graf_bt)
+        self.Exit.clicked.connect(self.exit_bt)
 
         # Группируем кнопки выбора струны
         self.button_group = QButtonGroup()
@@ -35,40 +36,17 @@ class Project(QMainWindow):
     def clean_label(self):
         self.label_2.setText('')
 
-    def sound_bt(self):
-        num_string = self.button_group.checkedId()
-        if num_string == 1:
-            playsound('string1.mp3')
-        elif num_string == 2:
-            playsound('string2.mp3')
-        elif num_string == 3:
-            playsound('string3.mp3')
-        elif num_string == 4:
-            playsound('string4.mp3')
-        elif num_string == 5:
-            playsound('string5.mp3')
-        elif num_string == 6:
-            playsound('string6.mp3')
-        else:
-            self.label_2.setText('Выберите струну')
-            timer = Timer(3, self.clean_label)
-            timer.start()
-
     def record_bt(self):
-        # имя файла для записи
+        num_string = self.button_group.checkedId()
+        timer = Timer(3, self.clean_label)
+        # Записываем звук
         filename = "recorded.wav"
-        # установить размер блока в 1024 сэмпла
         chunk = 1024
-        # образец формата
-        FORMAT = pyaudio.paInt16
-        # моно, если хотите стере измените на 2
+        format = pyaudio.paInt16
         channels = 1
-        # 44100 сэмплов в секунду
         sample_rate = 44100
         record_seconds = 5
-        # initialize PyAudio object
         p = pyaudio.PyAudio()
-        # открыть объект потока как ввод и вывод
         stream = p.open(format=pyaudio.paInt16,
                         rate=44100,
                         channels=1,
@@ -82,31 +60,116 @@ class Project(QMainWindow):
             data = stream.read(chunk)
             frames.append(data)
         print("Finished recording.")
-        # остановить и закрыть поток
         stream.stop_stream()
         stream.close()
-        # завершить работу объекта pyaudio
         p.terminate()
-        # сохранить аудиофайл
-        # открываем файл в режиме 'запись байтов'
         wf = wave.open(filename, "wb")
-        # установить каналы
         wf.setnchannels(channels)
-        # установить формат образца
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        # установить частоту дискретизации
+        wf.setsampwidth(p.get_sample_size(format))
         wf.setframerate(sample_rate)
-        # записываем кадры как байты
         wf.writeframes(b"".join(frames))
-        # закрыть файл
         wf.close()
 
-    def calc(self):
+        # Анализируем звуковой файл
+        wf = wave.open('recorded.wav', 'rb')
+        swidth = wf.getsampwidth()
+        rate = wf.getframerate()
+        window = np.blackman(chunk)
+        p = pyaudio.PyAudio()
+        stream = p.open(format=
+                        p.get_format_from_width(wf.getsampwidth()),
+                        channels=wf.getnchannels(),
+                        rate=rate,
+                        output=True)
+
+        data = wf.readframes(chunk)
+        list_ch = []
+        while len(data) == chunk * swidth:
+            indata = np.array(wave.struct.unpack("%dh" % (len(data) / swidth), data)) * window
+            fft_data = abs(np.fft.rfft(indata)) ** 2
+            which = fft_data[1:].argmax() + 1
+            if which != len(fft_data) - 1:
+                y0, y1, y2 = np.log(fft_data[which - 1:which + 2:])
+                x1 = (y2 - y0) * .5 / (2 * y1 - y2 - y0)
+                freq = (which + x1) * rate / chunk
+                list_ch.append(freq)
+            else:
+                freq = which * rate / chunk
+                list_ch.append(freq)
+            data = wf.readframes(chunk)
+        if data:
+            stream.write(data)
+        stream.close()
+        p.terminate()
+
+        if num_string == 1:
+            if max(list_ch) < 328:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 330:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        elif num_string == 2:
+            if max(list_ch) < 246:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 248:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        elif num_string == 3:
+            if max(list_ch) < 195:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 197:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        elif num_string == 4:
+            if max(list_ch) < 146:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 148:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        elif num_string == 5:
+            if max(list_ch) < 109:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 111:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        elif num_string == 6:
+            if max(list_ch) < 81:
+                self.label_2.setText('Подтяните струну')
+            elif max(list_ch) > 83:
+                self.label_2.setText('Ослабьте струну')
+            else:
+                self.label_2.setText('Струна настроена')
+            timer.start()
+        else:
+            self.label_2.setText('Выберите струну')
+            timer.start()
+
+    def graf_bt(self):  # Вывод графика
+        freq, sound = scipy.io.wavfile.read("recorded.wav")
+        dur = len(sound) / freq
+        time = np.arange(0, dur, 1 / freq)
+
+        plt.plot(time, sound)
+        plt.ylabel('высота тона')
+        plt.xlabel('время')
+        plt.show()
+
+    def exit_bt(self):
         pass
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = Project()
+    ex = Guitar()
     ex.show()
     sys.exit(app.exec())
